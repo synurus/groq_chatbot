@@ -38,7 +38,9 @@ module.exports = async (req, res) => {
   const data = await weatherRes.json()
 
   if (String(data.cod) !== '200') {
-    const message = data.cod === '404' ? '해당 지역을 찾을 수 없어요' : '날씨 조회에 실패했어요'
+    let message = '날씨 조회에 실패했어요 (' + data.cod + ')'
+    if (String(data.cod) === '404') message = '해당 지역을 찾을 수 없어요'
+    if (String(data.cod) === '401') message = 'API 키가 아직 유효하지 않아요 (발급 후 최대 2시간 정도 걸릴 수 있어요)'
     res.status(200).json({ error: message })
     return
   }

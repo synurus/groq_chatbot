@@ -1,5 +1,18 @@
 // Vercel Serverless Function: /api/weather
 // 국내 지역명을 받아 OpenWeatherMap 현재 날씨를 조회
+
+// 도시명 검색(q=)은 한글 지명을 잘 인식하지 못하므로,
+// Geocoding API로 지역명 -> 위경도를 먼저 구하고 위경도로 날씨를 조회한다
+async function geocode(location, key) {
+  const url = 'http://api.openweathermap.org/geo/1.0/direct'
+    + '?q=' + encodeURIComponent(location) + ',KR'
+    + '&limit=1&appid=' + key
+
+  const geoRes = await fetch(url)
+  const geoData = await geoRes.json()
+  return Array.isArray(geoData) && geoData[0] ? geoData[0] : null
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'POST만 허용됩니다' })
@@ -29,8 +42,14 @@ module.exports = async (req, res) => {
     return
   }
 
+  const geo = await geocode(location, key)
+  if (!geo) {
+    res.status(200).json({ error: '해당 지역을 찾을 수 없어요' })
+    return
+  }
+
   const url = 'https://api.openweathermap.org/data/2.5/weather'
-    + '?q=' + encodeURIComponent(location) + ',KR'
+    + '?lat=' + geo.lat + '&lon=' + geo.lon
     + '&appid=' + key
     + '&units=metric&lang=kr'
 
@@ -46,7 +65,7 @@ module.exports = async (req, res) => {
   }
 
   res.status(200).json({
-    location: data.name,
+    location,
     temp: Math.round(data.main.temp),
     feelsLike: Math.round(data.main.feels_like),
     tempMin: Math.round(data.main.temp_min),

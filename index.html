@@ -34,21 +34,62 @@
   }
 
   .chat-header {
-    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
     border-bottom: 1px solid #eef1f4;
     flex-shrink: 0;
   }
 
   .chat-header h1 {
-    margin: 0 0 4px;
-    font-size: 20px;
+    margin: 0;
+    font-size: 18px;
     color: #1f2933;
   }
 
   .chat-header p {
-    margin: 0;
-    font-size: 13px;
+    margin: 2px 0 0;
+    font-size: 12px;
     color: #7b8794;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: #f1f3f6;
+    border-radius: 10px;
+    padding: 4px;
+    flex-shrink: 0;
+  }
+
+  .tab-btn {
+    border: none;
+    background: none;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #7b8794;
+    cursor: pointer;
+  }
+
+  .tab-btn.active {
+    background: #fff;
+    color: #f2542d;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+
+  .panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel[hidden] {
+    display: none;
   }
 
   .messages {
@@ -96,7 +137,7 @@
     flex-shrink: 0;
   }
 
-  #q {
+  #q, #locInput {
     flex: 1;
     padding: 12px 14px;
     border: 1px solid #e4e7eb;
@@ -106,11 +147,11 @@
     transition: border-color 0.15s ease;
   }
 
-  #q:focus {
+  #q:focus, #locInput:focus {
     border-color: #f2542d;
   }
 
-  #btn {
+  #btn, #locBtn {
     padding: 12px 20px;
     border: none;
     border-radius: 10px;
@@ -122,30 +163,115 @@
     transition: background 0.15s ease;
   }
 
-  #btn:hover {
+  #btn:hover, #locBtn:hover {
     background: #d9421d;
   }
 
-  #btn:active {
+  #btn:active, #locBtn:active {
     transform: scale(0.97);
+  }
+
+  .weather-result {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+  }
+
+  .weather-loading, .weather-error {
+    color: #7b8794;
+    font-size: 14px;
+  }
+
+  .weather-card {
+    background: #f8f9fb;
+    border: 1px solid #e4e7eb;
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+  }
+
+  .weather-loc {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #7b8794;
+  }
+
+  .weather-temp {
+    margin: 8px 0 0;
+    font-size: 44px;
+    font-weight: 700;
+    color: #1f2933;
+  }
+
+  .weather-desc {
+    margin: 4px 0 20px;
+    font-size: 14px;
+    color: #364152;
+  }
+
+  .weather-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .weather-grid div {
+    background: #fff;
+    border-radius: 10px;
+    padding: 10px 4px;
+  }
+
+  .weather-grid span {
+    display: block;
+    font-size: 11px;
+    color: #9aa5b1;
+    margin-bottom: 4px;
+  }
+
+  .weather-grid b {
+    font-size: 14px;
+    color: #1f2933;
   }
 </style>
 </head>
 <body>
   <div class="chat-app">
     <div class="chat-header">
-      <h1>Groq 챗봇</h1>
-      <p>궁금한 걸 물어보세요</p>
+      <div>
+        <h1>Groq 챗봇</h1>
+        <p>궁금한 걸 물어보세요</p>
+      </div>
+
+      <!-- 챗봇 / 날씨 메뉴 -->
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="chat">챗봇</button>
+        <button class="tab-btn" data-tab="weather">날씨</button>
+      </div>
     </div>
 
-    <!-- 대화 내용이 쌓이는 자리 -->
-    <div id="messages" class="messages"></div>
+    <!-- 챗봇 패널 -->
+    <div id="chatPanel" class="panel">
+      <!-- 대화 내용이 쌓이는 자리 -->
+      <div id="messages" class="messages"></div>
 
-    <!-- 질문 입력칸 + 버튼 -->
-    <div class="input-row">
-      <input id="q" placeholder="메시지를 입력하세요" autocomplete="off" />
-      <!-- 누르면 서버로 보냄 -->
-      <button id="btn">보내기</button>
+      <!-- 질문 입력칸 + 버튼 (채팅창에서 "날씨 서울"처럼 입력해도 동작) -->
+      <div class="input-row">
+        <input id="q" placeholder="메시지를 입력하세요 (예: 날씨 서울)" autocomplete="off" />
+        <button id="btn">보내기</button>
+      </div>
+    </div>
+
+    <!-- 날씨 패널 -->
+    <div id="weatherPanel" class="panel" hidden>
+      <div id="weatherResult" class="weather-result">
+        <p class="weather-loading">국내 지역명을 입력해보세요 (예: 서울, 부산)</p>
+      </div>
+
+      <div class="input-row">
+        <input id="locInput" placeholder="지역명 입력 (예: 서울)" autocomplete="off" />
+        <button id="locBtn">조회</button>
+      </div>
     </div>
   </div>
 

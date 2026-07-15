@@ -1,4 +1,18 @@
 const messagesEl = document.getElementById('messages')
+const chatPanel = document.getElementById('chatPanel')
+const weatherPanel = document.getElementById('weatherPanel')
+const weatherResultEl = document.getElementById('weatherResult')
+
+// 상단 탭(챗봇/날씨) 전환
+document.querySelectorAll('.tab-btn').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'))
+    tab.classList.add('active')
+    const target = tab.dataset.tab
+    chatPanel.hidden = target !== 'chat'
+    weatherPanel.hidden = target !== 'weather'
+  })
+})
 
 // 대화창에 말풍선 하나 추가하고, 나중에 내용을 바꿀 수 있게 그 엘리먼트를 돌려줌
 function appendMessage(text, sender) {
@@ -6,9 +20,56 @@ function appendMessage(text, sender) {
   el.className = 'msg ' + sender
   el.textContent = text
   messagesEl.appendChild(el)
-  // 새 메시지가 보이도록 맨 아래로 스크롤
   messagesEl.scrollTop = messagesEl.scrollHeight
   return el
+}
+
+// 위치명으로 /api/weather 호출
+function fetchWeather(location) {
+  return fetch('/api/weather', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ location })
+  }).then(res => res.json())
+}
+
+// 날씨 응답을 대화창용 한 줄 텍스트로 변환
+function formatWeatherText(w) {
+  return w.location + ' 현재 ' + w.temp + '°C (체감 ' + w.feelsLike + '°C), ' + w.description + '\n'
+    + '오늘 최저 ' + w.tempMin + '°C / 최고 ' + w.tempMax + '°C\n'
+    + '습도 ' + w.humidity + '% · 바람 ' + w.windSpeed + 'm/s'
+}
+
+// "날씨 서울" / "서울 날씨" / "날씨" 같은 문장에서 지역명 뽑아내기 (명령어 아니면 null)
+function extractWeatherLocation(text) {
+  const trimmed = text.trim()
+  if (trimmed === '날씨') return ''
+
+  let m = trimmed.match(/^\/?날씨\s+(.+)$/)
+  if (m) return m[1].trim()
+
+  m = trimmed.match(/^(.+?)\s*날씨$/)
+  if (m && m[1].trim()) return m[1].trim()
+
+  return null
+}
+
+// 챗봇 대화창 안에서 날씨 명령어 처리
+function handleWeatherCommand(location) {
+  if (!location) {
+    appendMessage('어느 지역 날씨가 궁금하세요? "날씨 서울"처럼 입력해보세요.', 'bot')
+    return
+  }
+  const pending = appendMessage('날씨 확인 중…', 'bot pending')
+  fetchWeather(location)
+    .then(data => {
+      pending.textContent = data.error || formatWeatherText(data)
+      pending.classList.remove('pending')
+    })
+    .catch(() => {
+      pending.textContent = '❌ 날씨 조회 실패'
+      pending.classList.remove('pending')
+    })
 }
 
 // 질문 보내기 동작 (버튼 클릭, 엔터 둘 다에서 재사용)
@@ -17,40 +78,115 @@ function sendPrompt() {
   const prompt = input.value.trim()
   if (!prompt) return
 
-  // 내가 보낸 말풍선 먼저 표시
   appendMessage(prompt, 'user')
   input.value = ''
 
-  // 응답 기다리는 동안 보여줄 임시 말풍선
+  // 날씨 명령어면 챗봇 API 대신 날씨 API로 보냄
+  const weatherLocation = extractWeatherLocation(prompt)
+  if (weatherLocation !== null) {
+    handleWeatherCommand(weatherLocation)
+    return
+  }
+
   const pending = appendMessage('…', 'bot pending')
 
-  // 내 서버(프록시) 창구로 요청 (키 없음)
-  // fetch(...).then(...).then(...).catch(...) 처럼 점(.)으로 쭉 이어붙이는 걸 "메서드 체이닝"이라 함
-  // "요청 보내고(fetch) → 성공하면(then) → 또 처리하고(then) → 실패하면(catch)" 순서로 연결됨
   fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    // 입력칸 값을 문자열로 바꿔 보내기
     body: JSON.stringify({ prompt })
   })
-    // 응답을 객체로 변환
     .then(res => res.json())
-    // 받은 답(reply)을 임시 말풍선 자리에 채워넣기
     .then(data => {
       pending.textContent = data.reply || data.error
       pending.classList.remove('pending')
     })
-    // 서버가 안 켜져 있으면 안내 메시지
     .catch(() => {
       pending.textContent = '❌ 요청 실패 (로컬 테스트는 vercel dev 로 실행)'
       pending.classList.remove('pending')
     })
 }
 
-// '보내기' 버튼에 클릭 동작 연결
 document.getElementById('btn').addEventListener('click', sendPrompt)
-
-// 입력칸에서 엔터 치면 바로 전송
 document.getElementById('q').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') sendPrompt()
+})
+
+// 날씨 탭 결과 카드를 DOM으로 직접 구성 (innerHTML 대신 textContent로 XSS 방지)
+function renderWeatherCard(data) {
+  weatherResultEl.textContent = ''
+
+  if (data.error) {
+    const p = document.createElement('p')
+    p.className = 'weather-error'
+    p.textContent = data.error
+    weatherResultEl.appendChild(p)
+    return
+  }
+
+  const card = document.createElement('div')
+  card.className = 'weather-card'
+
+  const loc = document.createElement('p')
+  loc.className = 'weather-loc'
+  loc.textContent = data.location
+
+  const temp = document.createElement('p')
+  temp.className = 'weather-temp'
+  temp.textContent = data.temp + '°C'
+
+  const desc = document.createElement('p')
+  desc.className = 'weather-desc'
+  desc.textContent = data.description + ' · 체감 ' + data.feelsLike + '°C'
+
+  const grid = document.createElement('div')
+  grid.className = 'weather-grid'
+  ;[
+    ['최저', data.tempMin + '°C'],
+    ['최고', data.tempMax + '°C'],
+    ['습도', data.humidity + '%'],
+    ['바람', data.windSpeed + 'm/s']
+  ].forEach(([label, value]) => {
+    const item = document.createElement('div')
+    const span = document.createElement('span')
+    span.textContent = label
+    const b = document.createElement('b')
+    b.textContent = value
+    item.appendChild(span)
+    item.appendChild(b)
+    grid.appendChild(item)
+  })
+
+  card.appendChild(loc)
+  card.appendChild(temp)
+  card.appendChild(desc)
+  card.appendChild(grid)
+  weatherResultEl.appendChild(card)
+}
+
+// 날씨 탭 조회 버튼 / 엔터
+function searchWeather() {
+  const locInput = document.getElementById('locInput')
+  const location = locInput.value.trim()
+  if (!location) return
+
+  weatherResultEl.textContent = ''
+  const loading = document.createElement('p')
+  loading.className = 'weather-loading'
+  loading.textContent = '조회 중…'
+  weatherResultEl.appendChild(loading)
+
+  fetchWeather(location)
+    .then(renderWeatherCard)
+    .catch(() => {
+      weatherResultEl.textContent = ''
+      const p = document.createElement('p')
+      p.className = 'weather-error'
+      p.textContent = '❌ 조회 실패'
+      weatherResultEl.appendChild(p)
+    })
+}
+
+document.getElementById('locBtn').addEventListener('click', searchWeather)
+document.getElementById('locInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') searchWeather()
 })
